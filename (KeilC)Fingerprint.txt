@@ -1,0 +1,776 @@
+#include "ht32.h"
+#include "ht32_board.h"
+
+void USART();
+void BUTTON();
+void CKCU();
+void delay(int time);
+void My_Usart1_Send(char *string);
+bool IsPressFinger();
+bool CaptureFinger();
+bool CheckEnrolled(int id);
+int    EnrollStart(int id);
+int    Identify1_N();
+void Enroll1();
+void Enroll2();
+void Enroll3();
+void IDFinger();
+void LED(bool on);
+void OPEN();
+void CLOSE();
+void Enroll();
+
+int main(void)
+{
+	CKCU();
+	BUTTON();
+	GPIO_WriteOutBits(Led1, Led1_GPIO_PIN, SET);
+	GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, SET);
+	GPIO_WriteOutBits(Led3, Led3_GPIO_PIN, SET);
+	GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, SET);
+	USART();
+	OPEN();
+
+	while (1)
+	{
+/*----------------------------------Enroll-------------------------------------------*/	
+		if(GPIO_ReadInBit(KEY1, KEY1_AFIO_PIN)==RESET)
+		{
+			GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, RESET);
+			OPEN();
+			LED(TRUE);
+			Enroll();
+			LED(FALSE);
+			CLOSE();
+			delay(10000);
+			GPIO_WriteOutBits(Led1, Led1_GPIO_PIN, SET);
+			GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, SET);
+			GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, SET);
+		}
+/*-------------------------------------------------------------------------------------*/	
+		delay(10000);
+/*----------------------------------IDFinger---------------------------------------*/		
+		if(GPIO_ReadInBit(KEY2, KEY2_AFIO_PIN)==RESET)
+		{
+			GPIO_WriteOutBits(Led3, Led3_GPIO_PIN, RESET);
+			OPEN();
+			LED(TRUE);
+			IDFinger();
+			LED(FALSE);
+			CLOSE();
+			delay(20000000);
+			GPIO_WriteOutBits(RELAY, RELAY_GPIO_PIN, RESET);
+			GPIO_WriteOutBits(Led1, Led1_GPIO_PIN, SET);
+			GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, SET);
+			GPIO_WriteOutBits(Led3, Led3_GPIO_PIN, SET);
+		}
+/*-------------------------------------------------------------------------------------*/	
+	}
+}
+
+void CKCU()
+{
+  CKCU_PeripClockConfig_TypeDef CKCUClock = {{0}};
+  CKCUClock.Bit.AFIO   = 1;
+/*----------------------------USART---------------------------------*/
+  CKCUClock.Bit.USART0 = 1;
+  CKCUClock.Bit.USART1 = 1;
+/*--------------------------Button&LED&RELAY----------------*/ 
+	 RELAY_CLK(CKCUClock)  = 1; 
+	 KEY1_CLK(CKCUClock)  = 1;
+	 KEY2_CLK(CKCUClock)  = 1;
+	 Led1_CLK(CKCUClock)  = 1;
+	 Led2_CLK(CKCUClock)  = 1;
+   Led3_CLK(CKCUClock)  = 1;
+	 Led4_CLK(CKCUClock)  = 1;
+/*-----------------------------------------------------------------------*/
+  CKCU_PeripClockConfig(CKCUClock, ENABLE);
+}
+
+void USART()
+{   
+	USART_InitTypeDef USART_InitStructure;
+/*------------------------------------USART0------------------------------------------*/
+  AFIO_GPxConfig(COM1_TX_GPIO_ID, COM1_TX_AFIO_PIN, AFIO_FUN_USART_UART);
+  AFIO_GPxConfig(COM1_RX_GPIO_ID, COM1_RX_AFIO_PIN, AFIO_FUN_USART_UART);
+	
+  USART_InitStructure.USART_BaudRate = 9600;
+  USART_InitStructure.USART_WordLength = USART_WORDLENGTH_8B;
+  USART_InitStructure.USART_StopBits = USART_STOPBITS_1;
+  USART_InitStructure.USART_Parity = USART_PARITY_NO;
+  USART_InitStructure.USART_Mode = USART_MODE_NORMAL;
+	
+  USART_Init(COM1_PORT, &USART_InitStructure);
+  USART_TxCmd(COM1_PORT, ENABLE);
+  USART_RxCmd(COM1_PORT, ENABLE);
+/*-----------------------------------------------------------------------------------------*/
+/*------------------------------------USART1------------------------------------------*/
+  AFIO_GPxConfig(GPIO_PB, AFIO_PIN_15, AFIO_FUN_USART_UART);//USART1
+  AFIO_GPxConfig(GPIO_PC, AFIO_PIN_0, AFIO_FUN_USART_UART);//USART1
+	
+  USART_InitStructure.USART_BaudRate = 9600;
+  USART_InitStructure.USART_WordLength = USART_WORDLENGTH_8B;
+  USART_InitStructure.USART_StopBits = USART_STOPBITS_1;
+  USART_InitStructure.USART_Parity = USART_PARITY_NO;
+  USART_InitStructure.USART_Mode = USART_MODE_NORMAL;
+
+  USART_Init(HT_USART1, &USART_InitStructure);
+  USART_TxCmd(HT_USART1, ENABLE);
+  USART_RxCmd(HT_USART1, ENABLE);
+/*-----------------------------------------------------------------------------------------*/
+}
+
+void BUTTON()
+{
+/*------------------------------------RELAY---------------------------------------*/
+  AFIO_GPxConfig(RELAY_ID, RELAY_AFIO_PIN, AFIO_MODE_DEFAULT);                            
+  GPIO_DirectionConfig(RELAY,RELAY_GPIO_PIN, GPIO_DIR_OUT); 
+/*------------------------------------KEY1------------------------------------------*/
+  AFIO_GPxConfig(KEY1_ID , KEY1_AFIO_PIN , AFIO_FUN_DEFAULT);                                                                
+  GPIO_DirectionConfig(KEY1, KEY1_AFIO_PIN , GPIO_DIR_IN);                                                           
+  GPIO_PullResistorConfig(KEY1, KEY1_GPIO_PIN, GPIO_PR_UP);
+  GPIO_InputConfig(KEY1, KEY1_GPIO_PIN, ENABLE);
+/*------------------------------------KEY2------------------------------------------*/
+  AFIO_GPxConfig(KEY2_ID , KEY2_AFIO_PIN , AFIO_FUN_DEFAULT);                                                                
+  GPIO_DirectionConfig(KEY2, KEY2_AFIO_PIN , GPIO_DIR_IN);                                                           
+  GPIO_PullResistorConfig(KEY2, KEY2_GPIO_PIN, GPIO_PR_UP);
+  GPIO_InputConfig(KEY2, KEY2_GPIO_PIN, ENABLE);
+/*------------------------------------LED1------------------------------------------*/
+	AFIO_GPxConfig(Led1_ID, Led1_AFIO_PIN, AFIO_MODE_DEFAULT);                                        
+  GPIO_DirectionConfig(Led1,Led1_GPIO_PIN, GPIO_DIR_OUT);
+/*------------------------------------LED2------------------------------------------*/
+  AFIO_GPxConfig(Led2_ID, Led2_AFIO_PIN, AFIO_MODE_DEFAULT);                                        
+  GPIO_DirectionConfig(Led2,Led2_GPIO_PIN, GPIO_DIR_OUT);
+/*------------------------------------LED3------------------------------------------*/
+	AFIO_GPxConfig(Led3_ID, Led3_AFIO_PIN, AFIO_MODE_DEFAULT);                                        
+  GPIO_DirectionConfig(Led3,Led3_GPIO_PIN, GPIO_DIR_OUT);
+/*------------------------------------LED4------------------------------------------*/
+	AFIO_GPxConfig(Led4_ID, Led4_AFIO_PIN, AFIO_MODE_DEFAULT);                                        
+  GPIO_DirectionConfig(Led4,Led4_GPIO_PIN, GPIO_DIR_OUT);
+}
+
+void Enroll()
+{
+	bool useid = 1;
+	bool bret;
+  int id = 0;
+	
+	while(useid == 1){
+    useid=CheckEnrolled(id);
+    if(useid == 1)
+    {
+			id++;
+    }
+	}
+	EnrollStart(id);
+	
+	while(IsPressFinger()==0)
+	{
+		delay(10000);
+	}
+	
+	bret=CaptureFinger();
+	
+	if(bret!=0)
+	{
+		GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, SET);
+		//My_Usart1_Send("Remove finger");
+		delay(10000);
+		Enroll1();
+		delay(1000);
+		while(IsPressFinger()==1)
+		{
+			delay(10000);
+		}
+		GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, RESET);
+		//My_Usart1_Send("Press same finger again");
+		while(IsPressFinger()==0)
+		{
+			delay(10000);
+		}
+		bret = CaptureFinger();
+		
+		if (bret != 0)
+		{
+			GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, SET);
+			//My_Usart1_Send("Remove finger");
+			delay(10000);
+			Enroll2();
+			delay(1000);
+			while(IsPressFinger()==1)
+			{
+				delay(10000);
+			}
+			GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, RESET);
+			//My_Usart1_Send("Press same finger again");
+			while(IsPressFinger()==0)
+			{
+				delay(10000);
+			}
+			bret = CaptureFinger();
+			
+			if(bret != 0)
+			{
+				GPIO_WriteOutBits(Led4, Led4_GPIO_PIN, SET);
+				//My_Usart1_Send("Remove finger");
+				delay(10000);
+				Enroll3();
+				delay(1000);
+				GPIO_WriteOutBits(Led1, Led1_GPIO_PIN, RESET);
+				//My_Usart1_Send("Sueessful Enroll!!");
+			}
+			else
+			{
+				GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, RESET);
+				My_Usart1_Send("Failed to capture three finger");
+			}
+		}
+		else
+		{
+			GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, RESET);
+			My_Usart1_Send("Failed to capture second finger");
+		}
+	}
+	else 
+	{
+		GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, RESET);
+		My_Usart1_Send("Failed to capture first finger");
+	}
+}
+
+void IDFinger()
+{
+	int i=0;
+	int ledsum=0;
+	int id;
+	delay(100000);
+	while(i==0)
+	{
+		if (IsPressFinger())
+		{
+			CaptureFinger();
+			id = Identify1_N();
+    
+			if (id <200) 
+			{
+				delay(10000);
+/*-------------------------------OK------------------------------------------*/
+				GPIO_WriteOutBits(Led1, Led1_GPIO_PIN, RESET);
+				GPIO_WriteOutBits(RELAY, RELAY_GPIO_PIN, SET);
+/*------------------------------------------------------------------------------*/	
+				i++;
+			}
+			else
+			{
+				delay(10000);
+/*-------------------------------FAILED-----------------------------------*/
+				GPIO_WriteOutBits(Led2, Led2_GPIO_PIN, RESET);
+				GPIO_WriteOutBits(RELAY, RELAY_GPIO_PIN, RESET);
+/*------------------------------------------------------------------------------*/	
+				i++;
+			}
+		}
+		else
+		{
+			 delay(10000);
+/*-------------------------Please press finger------------------------------*/
+				GPIO_WriteOutBits(Led3, Led3_GPIO_PIN, RESET);
+/*-------------------------------------------------------------------------------*/	
+		}
+		delay(10000);
+	}
+}
+bool CheckEnrolled(int id)
+{
+	if(id == 0)
+	{
+		char CheckEnrolled[12]={0x55,0xAA,0x01,0x00,0x00,0x00,0x00,0x00,0x21,0x00,0x21,0x01};
+		char CheckBuffer[12];
+		int i=0;
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,CheckEnrolled[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				CheckBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+		
+		if(CheckBuffer[8]==0x31)
+		{
+			return 0;
+		}
+		if(CheckBuffer[8]==0x30)
+		{
+			return 1;
+		}
+  }
+	
+	if(id == 1)
+	{
+		char CheckEnrolled[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x21,0x00,0x22,0x01};
+		char CheckBuffer[12];
+		int i=0;
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,CheckEnrolled[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				CheckBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+		if(CheckBuffer[8]==0x31)
+		{
+			return 0;
+		}
+		if(CheckBuffer[8]==0x30)
+		{
+			return 1;
+		}
+	}
+	
+	if(id == 2)
+	{
+		char CheckEnrolled[12]={0x55,0xAA,0x01,0x00,0x02,0x00,0x00,0x00,0x21,0x00,0x23,0x01};
+		char CheckBuffer[12];
+		int i=0;
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,CheckEnrolled[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				CheckBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+		if(CheckBuffer[8]==0x31)
+		{
+			return 0;
+		}
+		if(CheckBuffer[8]==0x30)
+		{
+			return 1;
+		}
+	}
+}
+
+int    EnrollStart(int id)
+{
+	if(id == 0)
+	{
+		char EnrollStart[12]={0x55,0xAA,0x01,0x00,0x00,0x00,0x00,0x00,0x22,0x00,0x22,0x01};
+		char EnrollStartBuffer[12];
+		int i=0;
+		delay(1000000);
+
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,EnrollStart[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+	
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				EnrollStartBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+	}
+	
+	if(id == 1)
+	{
+		char EnrollStart[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x22,0x00,0x23,0x01};
+		char EnrollStartBuffer[12];
+		int i=0;
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,EnrollStart[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				EnrollStartBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+	}
+	
+	if(id == 2)
+	{
+		char EnrollStart[12]={0x55,0xAA,0x01,0x00,0x02,0x00,0x00,0x00,0x22,0x00,0x24,0x01};
+		char EnrollStartBuffer[12];
+		int i=0;
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,EnrollStart[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				EnrollStartBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+	}
+}
+
+void Enroll1()
+{
+	char enroll1[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x23,0x00,0x24,0x01};
+	char enroll1Buffer[12];
+
+	int i=0;
+	delay(1000000);
+
+ while(i<12)
+ {
+	USART_SendData(HT_USART0,enroll1[i]);
+	while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+	i++;
+ }
+	i=0;
+
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			enroll1Buffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+		i=0;
+}
+void Enroll2()
+{
+	char enroll2[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x24,0x00,0x25,0x01};
+	char enroll2Buffer[12];
+
+	int i=0;
+	delay(1000000);
+
+ while(i<12)
+ {
+	USART_SendData(HT_USART0,enroll2[i]);
+	while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+	i++;
+ }
+	i=0;
+
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			enroll2Buffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+		i=0;
+}
+void Enroll3()
+{
+	char enroll3[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x25,0x00,0x26,0x01};
+	char enroll3Buffer[12];
+
+	int i=0;
+	delay(1000000);
+
+ while(i<12)
+ {
+	USART_SendData(HT_USART0,enroll3[i]);
+	while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+	i++;
+ }
+	i=0;
+
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			enroll3Buffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+		i=0;
+}
+bool CaptureFinger()
+{
+ char CaptureFinger[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x60,0x00,0x61,0x01};
+ char Capturebuffer[12];
+ int i=0;
+ delay(1000000);
+
+ while(i<12)
+ {
+	USART_SendData(HT_USART0,CaptureFinger[i]);
+	while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+	i++;
+ }
+	i=0;
+
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			Capturebuffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+		i=0;
+	
+	if(Capturebuffer[8]==0x30)
+   {
+    return 1; 
+   }
+   else if(Capturebuffer[8]==0x31)
+   {
+    return 0; 
+   }
+}
+bool IsPressFinger()
+{
+	char IsPressFinger[12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x26,0x00,0x27,0x01};
+  char PressBuffer[12];
+  int i=0;
+	delay(1000000);
+	while(i<12)
+	{
+		USART_SendData(HT_USART0,IsPressFinger[i]);
+		while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+		i++;
+	}
+		i=0;
+	
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			PressBuffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+			i=0;
+		
+	if(PressBuffer[10]==0x52)
+  {
+    return 0;
+  }else
+	{
+		return 1;
+	}
+}
+
+int    Identify1_N()
+{
+	char Identify1_N[12]={0x55,0xAA,0x01,0x00,0x00,0x00,0x00,0x00,0x51,0x00,0x51,0x01};
+  char ibuffer[12];
+  int i=0;
+  int id;
+	delay(1000000);
+	
+	while(i<12)
+	{
+		USART_SendData(HT_USART0,Identify1_N[i]);
+		while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+		i++;
+	}
+		i=0;
+	
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			ibuffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+			i=0;
+	
+	if(ibuffer[8]==0x30)
+  {
+		id=ibuffer[4];
+		return id;
+  }
+
+  if(ibuffer[8]==0x31)
+  {
+   id=201;
+   return id; 
+  }
+}
+void delay(int time)
+{
+	int d;
+	for(d=0;d<time;d++);
+}
+
+void My_Usart1_Send(char *string)
+{
+	while(*string){
+        USART_SendData(HT_USART1, (unsigned short int) *string++);
+        while (USART_GetFlagStatus(HT_USART1, USART_FLAG_TXDE) == RESET);
+    }
+}
+void LED(bool on)
+{
+	int i =0;
+	if(on)
+	{
+		char LEDON [12]={0x55,0xAA,0x01,0x00,0x01,0x00,0x00,0x00,0x12,0x00,0x13,0x01};
+		char LEDONBuffer[12];
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,LEDON[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+		
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				LEDONBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+	}
+	
+	if(!on)
+	{
+		char LEDOFF [12]={0x55,0xAA,0x01,0x00,0x00,0x00,0x00,0x00,0x12,0x00,0x12,0x01};
+		char LEDOFFBuffer[12];
+		int i=0;
+		delay(1000000);
+		while(i<12)
+		{
+			USART_SendData(HT_USART0,LEDOFF[i]);
+			while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+			i++;
+		}
+			i=0;
+		
+		while(i<12)
+		{
+			if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+			{
+				LEDOFFBuffer[i]=USART_ReceiveData(HT_USART0);
+				i++;
+			}
+		}
+			i=0;
+		
+	}
+	
+}
+
+void OPEN()
+{
+	char OPEN[12]={0x55,0xAA,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x01,0x01};
+	char OPENBuffer[12];
+	int i=0;
+	while(i<12)
+	{
+		USART_SendData(HT_USART0,OPEN[i]);
+		while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+		i++;
+	}
+		i=0;
+	
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			OPENBuffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+			i=0;
+	delay(1000000);
+}
+
+void CLOSE()
+{
+	char CLOSE[12]={0x55,0xAA,0x01,0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x02,0x01};
+	char CLOSEBuffer[12];
+	int i=0;
+	delay(1000000);
+
+	while(i<12)
+	{
+		USART_SendData(HT_USART0,CLOSE[i]);
+		while(USART_GetFlagStatus(HT_USART0, USART_FLAG_TXDE)==RESET);
+		i++;
+	}
+		i=0;
+	
+	while(i<12)
+	{
+		if(USART_GetFlagStatus(HT_USART0, USART_FLAG_RXDNE)!=RESET)
+		{
+			CLOSEBuffer[i]=USART_ReceiveData(HT_USART0);
+			i++;
+		}
+	}
+			i=0;
+}
+#if (HT32_LIB_DEBUG == 1)
+
+void assert_error(u8* filename, u32 uline)
+{
+ 
+
+  while (1)
+  {
+  }
+}
+#endif
